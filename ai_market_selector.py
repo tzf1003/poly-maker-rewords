@@ -89,15 +89,19 @@ def get_hyperparameters():
 def update_selected_markets(markets: List[Dict[str, Any]]) -> str:
     """
     更新 Google Sheets 中的 Selected Markets 工作表
-    
+
     参数:
-        markets: 市场列表，每个市场包含:
+        markets: 市场列表（必须提供，即使是空列表）。每个市场包含:
             - question: 市场问题
             - max_size: 最大持仓
             - trade_size: 每次交易规模
             - param_type: 风险策略
             - comments: 备注（包含理由和置信度）
-    
+
+    示例:
+        - 保持当前市场: markets=[{"question": "Market A", "max_size": 100, ...}, ...]
+        - 清空所有市场: markets=[]
+
     返回:
         成功或失败的消息
     """
