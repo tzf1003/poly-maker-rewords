@@ -14,5 +14,5 @@ if __name__ == '__main__':
         except Exception as e:
             traceback.print_exc()
 
-        print("Now sleeping\n")
-        time.sleep(60 * 60 * 3) #3 hours
+        print("现在休眠中\n")
+        time.sleep(60 * 60 * 3) # 3小时

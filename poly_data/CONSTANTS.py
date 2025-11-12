@@ -1,3 +1,3 @@
-# Minimum position size to trigger position merging
-# Positions smaller than this will be ignored to save on gas costs
+# 触发持仓合并的最小持仓规模
+# 小于此值的持仓将被忽略以节省gas费用
 MIN_MERGE_SIZE = 20

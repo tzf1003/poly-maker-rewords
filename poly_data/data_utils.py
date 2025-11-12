@@ -3,7 +3,7 @@ from poly_data.utils import get_sheet_df
 import time
 import poly_data.global_state as global_state
 
-#sth here seems to be removing the position
+# 这里似乎会移除持仓
 def update_positions(avgOnly=False):
     pos_df = global_state.client.get_all_positions()
 
@@ -20,9 +20,9 @@ def update_positions(avgOnly=False):
         if not avgOnly:
             position['size'] = row['size']
         else:
-            
+
             for col in [f"{asset}_sell", f"{asset}_buy"]:
-                #need to review this
+                # 需要审查这个
                 if col not in global_state.performing or not isinstance(global_state.performing[col], set) or len(global_state.performing[col]) == 0:
                     try:
                         old_size = position['size']
@@ -31,16 +31,16 @@ def update_positions(avgOnly=False):
 
                     if asset in  global_state.last_trade_update:
                         if time.time() - global_state.last_trade_update[asset] < 5:
-                            print(f"Skipping update for {asset} because last trade update was less than 5 seconds ago")
+                            print(f"跳过 {asset} 的更新，因为最后交易更新不到5秒前")
                             continue
 
                     if old_size != row['size']:
-                        print(f"No trades are pending. Updating position from {old_size} to {row['size']} and avgPrice to {row['avgPrice']} using API")
-    
+                        print(f"没有待处理的交易。使用API将持仓从 {old_size} 更新到 {row['size']}，平均价更新到 {row['avgPrice']}")
+
                     position['size'] = row['size']
                 else:
-                    print(f"ALERT: Skipping update for {asset} because there are trades pending for {col} looking like {global_state.performing[col]}")
-    
+                    print(f"警告: 跳过 {asset} 的更新，因为 {col} 有待处理的交易，如下 {global_state.performing[col]}")
+
         global_state.positions[asset] = position
 
 def get_position(token):
@@ -56,28 +56,28 @@ def set_position(token, side, size, price, source='websocket'):
     price = float(price)
 
     global_state.last_trade_update[token] = time.time()
-    
+
     if side.lower() == 'sell':
         size *= -1
 
     if token in global_state.positions:
-        
+
         prev_price = global_state.positions[token]['avgPrice']
         prev_size = global_state.positions[token]['size']
 
 
         if size > 0:
             if prev_size == 0:
-                # Starting a new position
+                # 开始新持仓
                 avgPrice_new = price
             else:
-                # Buying more; update average price
+                # 买入更多；更新平均价格
                 avgPrice_new = (prev_price * prev_size + price * size) / (prev_size + size)
         elif size < 0:
-            # Selling; average price remains the same
+            # 卖出；平均价格保持不变
             avgPrice_new = prev_price
         else:
-            # No change in position
+            # 持仓无变化
             avgPrice_new = prev_price
 
 
@@ -86,7 +86,7 @@ def set_position(token, side, size, price, source='websocket'):
     else:
         global_state.positions[token] = {'size': size, 'avgPrice': price}
 
-    print(f"Updated position from {source}, set to ", global_state.positions[token])
+    print(f"从 {source} 更新持仓，设置为 ", global_state.positions[token])
 
 def update_orders():
     all_orders = global_state.client.get_all_orders()
@@ -95,12 +95,12 @@ def update_orders():
 
     if len(all_orders) > 0:
             for token in all_orders['asset_id'].unique():
-                
+
                 if token not in orders:
                     orders[str(token)] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
 
                 curr_orders = all_orders[all_orders['asset_id'] == str(token)]
-                
+
                 if len(curr_orders) > 0:
                     sel_orders = {}
                     sel_orders['buy'] = curr_orders[curr_orders['side'] == 'BUY']
@@ -110,7 +110,7 @@ def update_orders():
                         curr = sel_orders[type]
 
                         if len(curr) > 1:
-                            print("Multiple orders found, cancelling")
+                            print("发现多个订单，取消中")
                             global_state.client.cancel_all_asset(token)
                             orders[str(token)] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
                         elif len(curr) == 1:
@@ -132,7 +132,7 @@ def get_order(token):
         return global_state.orders[token]
     else:
         return {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
-    
+
 def set_order(token, side, size, price):
     curr = {}
     curr = {side: {'price': 0, 'size': 0}}
@@ -141,16 +141,16 @@ def set_order(token, side, size, price):
     curr[side]['price'] = float(price)
 
     global_state.orders[str(token)] = curr
-    print("Updated order, set to ", curr)
+    print("更新订单，设置为 ", curr)
 
-    
+
 
 def update_markets():
     received_df, received_params = get_sheet_df()
 
     if len(received_df) > 0:
         global_state.df, global_state.params = received_df.copy(), received_params
-    
+
 
     for _, row in global_state.df.iterrows():
         for col in ['token1', 'token2']:

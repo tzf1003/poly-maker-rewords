@@ -1,5 +1,6 @@
 const { BigNumber, ethers } = require('ethers');
 
+// 连接十六进制数据
 function joinHexData(hexData) {
     return `0x${hexData
         .map(hex => {
@@ -9,6 +10,7 @@ function joinHexData(hexData) {
         .join("")}`;
 }
 
+// ABI打包编码
 function abiEncodePacked(...params) {
     return joinHexData(
         params.map(({ type, value }) => {
@@ -42,11 +44,12 @@ function abiEncodePacked(...params) {
                 return encoded.slice(-40);
             }
 
-            throw new Error(`unsupported type ${type}`);
+            throw new Error(`不支持的类型 ${type}`);
         })
     );
 }
 
+// 签名交易哈希
 async function signTransactionHash(signer, message) {
     const messageArray = ethers.utils.arrayify(message);
     let sig = await signer.signMessage(messageArray);
@@ -62,7 +65,7 @@ async function signTransactionHash(signer, message) {
             sigV += 4;
             break;
         default:
-            throw new Error("Invalid signature");
+            throw new Error("无效的签名");
     }
 
     sig = sig.slice(0, -2) + sigV.toString(16);
@@ -74,9 +77,10 @@ async function signTransactionHash(signer, message) {
     };
 }
 
+// 签名并执行Safe交易
 async function signAndExecuteSafeTransaction(signer, safe, to, data, overrides = {}) {
     const nonce = await safe.nonce();
-    console.log("Nonce for safe: ", nonce);
+    console.log("Safe的Nonce: ", nonce);
     const value = "0";
     const safeTxGas = "0";
     const baseGas = "0";
@@ -97,7 +101,7 @@ async function signAndExecuteSafeTransaction(signer, safe, to, data, overrides =
         refundReceiver,
         nonce
     );
-    console.log("Transaction hash: ", txHash);
+    console.log("交易哈希: ", txHash);
 
     const rsvSignature = await signTransactionHash(signer, txHash);
     const packedSig = abiEncodePacked(
@@ -106,7 +110,7 @@ async function signAndExecuteSafeTransaction(signer, safe, to, data, overrides =
         { type: "uint8", value: rsvSignature.v }
     );
 
-    console.log("Executing transaction");
+    console.log("正在执行交易");
 
     return safe.execTransaction(
         to,

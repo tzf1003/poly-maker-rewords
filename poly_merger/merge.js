@@ -1,15 +1,15 @@
 /**
- * Poly-Merger: Position Merging Utility for Polymarket
- * 
- * This script handles merging of YES and NO positions in Polymarket prediction markets
- * to recover collateral. It works with both regular and negative risk markets.
- * 
- * The merger supports Gnosis Safe wallets through the safe-helpers.js utility.
- * 
- * Usage:
- *   node merge.js [amountToMerge] [conditionId] [isNegRiskMarket]
- * 
- * Example:
+ * Poly-Merger: Polymarket持仓合并工具
+ *
+ * 此脚本处理Polymarket预测市场中YES和NO持仓的合并以回收抵押品。
+ * 它适用于常规市场和负风险市场。
+ *
+ * 合并器通过safe-helpers.js工具支持Gnosis Safe钱包。
+ *
+ * 使用方法:
+ *   node merge.js [要合并的数量] [条件ID] [是否为负风险市场]
+ *
+ * 示例:
  *   node merge.js 1000000 12345 true
  */
 
@@ -19,28 +19,28 @@ const { existsSync } = require('fs');
 const { signAndExecuteSafeTransaction } = require('./safe-helpers');
 const { safeAbi } = require('./safeAbi');
 
-// Load environment variables
+// 加载环境变量
 const localEnvPath = resolve(__dirname, '.env');
 const parentEnvPath = resolve(__dirname, '../.env');
 const envPath = existsSync(localEnvPath) ? localEnvPath : parentEnvPath;
 require('dotenv').config({ path: envPath })
 
-// Connect to Polygon network
+// 连接到Polygon网络
 const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
 const privateKey = process.env.PK;
 const wallet = new ethers.Wallet(privateKey, provider);
 
-// Polymarket contract addresses
+// Polymarket合约地址
 const addresses = {
-  // Adapter contract for negative risk markets
+  // 负风险市场的适配器合约
   neg_risk_adapter: '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296',
-  // USDC token contract on Polygon
+  // Polygon上的USDC代币合约
   collateral: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
-  // Main conditional tokens contract for prediction markets
+  // 预测市场的主条件代币合约
   conditional_tokens: '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045'
 };
 
-// Minimal ABIs for the contracts we interact with
+// 我们交互的合约的最小ABI
 const negRiskAdapterAbi = [
   "function mergePositions(bytes32 conditionId, uint256 amount)"
 ];
@@ -50,91 +50,91 @@ const conditionalTokensAbi = [
 ];
 
 /**
- * Merges YES and NO positions in a Polymarket prediction market to recover USDC collateral.
- * 
- * This function handles both regular and negative risk markets via different contract calls.
- * It uses the Gnosis Safe wallet infrastructure for secure transaction execution.
- * 
- * @param {string|number} amountToMerge - Raw amount of tokens to merge (typically expressed in raw units, e.g., 1000000 = 1 USDC)
- * @param {string|number} conditionId - The market's condition ID
- * @param {boolean} isNegRiskMarket - Whether this is a negative risk market (uses different contract)
- * @returns {string} The transaction hash of the merge operation
+ * 合并Polymarket预测市场中的YES和NO持仓以回收USDC抵押品。
+ *
+ * 此函数通过不同的合约调用处理常规市场和负风险市场。
+ * 它使用Gnosis Safe钱包基础设施进行安全的交易执行。
+ *
+ * @param {string|number} amountToMerge - 要合并的原始代币数量（通常以原始单位表示，例如1000000 = 1 USDC）
+ * @param {string|number} conditionId - 市场的条件ID
+ * @param {boolean} isNegRiskMarket - 是否为负风险市场（使用不同的合约）
+ * @returns {string} 合并操作的交易哈希
  */
 async function mergePositions(amountToMerge, conditionId, isNegRiskMarket) {
-    // Log parameters for debugging
+    // 记录参数以便调试
     console.log(amountToMerge, conditionId, isNegRiskMarket);
-    
-    // Prepare transaction parameters
+
+    // 准备交易参数
     const nonce = await provider.getTransactionCount(wallet.address);
     const gasPrice = await provider.getGasPrice();
-    const gasLimit = 10000000;  // Set high gas limit to ensure transaction completes
+    const gasLimit = 10000000;  // 设置高gas限制以确保交易完成
 
     let tx;
-    // Different contract calls for different market types
+    // 不同市场类型的不同合约调用
     if (isNegRiskMarket) {
-      // For negative risk markets, use the adapter contract
+      // 对于负风险市场，使用适配器合约
       const negRiskAdapter = new ethers.Contract(addresses.neg_risk_adapter, negRiskAdapterAbi, wallet);
       tx = await negRiskAdapter.populateTransaction.mergePositions(conditionId, amountToMerge);
     } else {
-      // For regular markets, use the conditional tokens contract directly
+      // 对于常规市场，直接使用条件代币合约
       const conditionalTokens = new ethers.Contract(addresses.conditional_tokens, conditionalTokensAbi, wallet);
       tx = await conditionalTokens.populateTransaction.mergePositions(
-        addresses.collateral,        // USDC contract
-        ethers.constants.HashZero,   // Parent collection ID (0 for top-level markets)
-        conditionId,                 // Market ID
-        [1, 2],                      // Partition (indexes of outcomes to merge)
-        amountToMerge                // Amount to merge
+        addresses.collateral,        // USDC合约
+        ethers.constants.HashZero,   // 父集合ID（顶级市场为0）
+        conditionId,                 // 市场ID
+        [1, 2],                      // 分区（要合并的结果索引）
+        amountToMerge                // 要合并的数量
       );
     }
 
-    // Prepare full transaction object
+    // 准备完整的交易对象
     const transaction = {
       ...tx,
-      chainId: 137,       // Polygon chain ID
+      chainId: 137,       // Polygon链ID
       gasPrice: gasPrice,
       gasLimit: gasLimit,
       nonce: nonce
     };
 
-    // Get the Safe address from environment variables
+    // 从环境变量获取Safe地址
     const safeAddress = process.env.BROWSER_ADDRESS;
     const safe = new ethers.Contract(safeAddress, safeAbi, wallet);
 
-    // Execute the transaction through the Safe
-    console.log("Signing Transaction")
+    // 通过Safe执行交易
+    console.log("正在签名交易")
     const txResponse = await signAndExecuteSafeTransaction(
-      wallet, 
-      safe, 
-      transaction.to, 
-      transaction.data, 
-      { 
-        gasPrice: transaction.gasPrice, 
-        gasLimit: transaction.gasLimit 
+      wallet,
+      safe,
+      transaction.to,
+      transaction.data,
+      {
+        gasPrice: transaction.gasPrice,
+        gasLimit: transaction.gasLimit
       }
     );
-    
-    console.log("Sent transaction. Waiting for response")
+
+    console.log("已发送交易。等待响应")
     const txReceipt = await txResponse.wait();
-    
-    console.log("merge positions " + txReceipt.transactionHash);
+
+    console.log("合并持仓 " + txReceipt.transactionHash);
     return txReceipt.transactionHash;
 }
 
-// Parse command line arguments
+// 解析命令行参数
 const args = process.argv.slice(2);
 
-// Amount of tokens to merge (in raw units, e.g., 1000000 = 1 USDC)
-const amountToMerge = args[0]; 
+// 要合并的代币数量（原始单位，例如1000000 = 1 USDC）
+const amountToMerge = args[0];
 
-// The market's condition ID
+// 市场的条件ID
 const conditionId = args[1];
 
-// Whether this is a negative risk market (true/false)
+// 是否为负风险市场（true/false）
 const isNegRiskMarket = args[2] === 'true';
 
-// Execute the merge operation and handle any errors
+// 执行合并操作并处理任何错误
 mergePositions(amountToMerge, conditionId, isNegRiskMarket)
   .catch(error => {
-    console.error("Error merging positions:", error);
+    console.error("合并持仓时出错:", error);
     process.exit(1);
   });

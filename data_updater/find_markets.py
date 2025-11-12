@@ -18,7 +18,7 @@ def get_sel_df(spreadsheet, sheet_name='Selected Markets'):
         return sel_df
     except:
         return pd.DataFrame()
-    
+
 def get_all_markets(client):
     cursor = ""
     all_markets = []
@@ -30,7 +30,7 @@ def get_all_markets(client):
 
 
             cursor = markets['next_cursor']
-            
+
 
 
             all_markets.append(markets_df)
@@ -47,7 +47,7 @@ def get_all_markets(client):
 
 def get_bid_ask_range(ret, TICK_SIZE):
     bid_from = ret['midpoint'] - ret['max_spread'] / 100
-    bid_to = ret['best_ask'] #Although bid to this high up will change bid_from because of changing midpoint, take optimistic approach
+    bid_to = ret['best_ask'] # 虽然买单到这么高会因为改变中点而改变bid_from，但采取乐观的方法
 
     if bid_to == 0:
         bid_to = ret['midpoint']
@@ -80,24 +80,24 @@ def get_bid_ask_range(ret, TICK_SIZE):
 
     if ask_from < 0:
         ask_from = 0
-        
+
     return bid_from, bid_to, ask_from, ask_to
 
 
 def generate_numbers(start, end, TICK_SIZE):
-    # Calculate the starting point, rounding up to the next hundredth if not an exact multiple of TICK_SIZE
+    # 计算起始点，如果不是TICK_SIZE的精确倍数，则向上舍入到下一个百分位
     rounded_start = (int(start * 100) + 1) / 100 if start * 100 % 1 != 0 else start + TICK_SIZE
-    
-    # Calculate the ending point, rounding down to the nearest hundredth
+
+    # 计算结束点，向下舍入到最近的百分位
     rounded_end = int(end * 100) / 100
-    
-    # Generate numbers from rounded_start to rounded_end, ensuring they fall strictly within the original bounds
+
+    # 从rounded_start到rounded_end生成数字，确保它们严格落在原始边界内
     numbers = []
     current = rounded_start
     while current < end:
         numbers.append(current)
         current += TICK_SIZE
-        current = round(current, len(str(TICK_SIZE).split('.')[1]))  # Rounding to avoid floating point imprecision
+        current = round(current, len(str(TICK_SIZE).split('.')[1]))  # 舍入以避免浮点不精确
 
     return numbers
 
@@ -134,7 +134,7 @@ def process_single_row(row, client):
 
     ret['rewards_daily_rate'] = rate
     book = client.get_order_book(token1)
-    
+
     bids = pd.DataFrame()
     asks = pd.DataFrame()
 
@@ -160,7 +160,7 @@ def process_single_row(row, client):
         ret['best_ask'] = 0
 
     ret['midpoint'] = (ret['best_bid'] + ret['best_ask']) / 2
-    
+
     TICK_SIZE = row['minimum_tick_size']
     ret['tick_size'] = TICK_SIZE
 
@@ -224,19 +224,19 @@ def get_all_results(all_df, client, max_workers=5):
         try:
             return process_single_row(row, client)
         except:
-            print("error fetching market")
+            print("获取市场时出错")
             return None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(process_with_progress, (idx, row)) for idx, row in all_df.iterrows()]
-        
+
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
             if result is not None:
                 all_results.append(result)
 
             if len(all_results) % (max_workers * 2) == 0:
-                print(f'{len(all_results)} of {len(all_df)}')
+                print(f'{len(all_results)} / {len(all_df)}')
 
     return all_results
 
@@ -270,7 +270,7 @@ def add_volatility(row):
     price_df['p'] = price_df['p'].round(2)
 
     price_df.to_csv(f'data/{row["token1"]}.csv', index=False)
-    
+
     price_df['log_return'] = np.log(price_df['p'] / price_df['p'].shift(1))
 
     row_dict = row.copy()
@@ -291,7 +291,7 @@ def add_volatility(row):
     return new_dict
 
 def add_volatility_to_df(df, max_workers=2):
-    
+
     results = []
     df = df.reset_index(drop=True)
 
@@ -301,23 +301,23 @@ def add_volatility_to_df(df, max_workers=2):
             ret = add_volatility(row.to_dict())
             return ret
         except:
-            print("Error fetching volatility")
+            print("获取波动性时出错")
             return None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(process_volatility_with_progress, (idx, row)) for idx, row in df.iterrows()]
-        
+
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
             if result is not None:
                 results.append(result)
-                
+
             if len(results) % (max_workers * 2) == 0:
-                print(f'{len(results)} of {len(df)}')
-            
+                print(f'{len(results)} / {len(df)}')
+
     return pd.DataFrame(results)
 
-    
+
 def get_markets(all_results, sel_df, maker_reward=1):
     new_df = pd.DataFrame(all_results)
     new_df['spread'] = abs(new_df['best_ask'] - new_df['best_bid'])
@@ -328,11 +328,11 @@ def get_markets(all_results, sel_df, maker_reward=1):
     new_df = new_df.replace([np.inf, -np.inf], 0)
     all_data = new_df.copy()
     s_df = new_df.copy()
-    
+
 
     making_markets = s_df[~new_df['question'].isin(sel_df['question'])]
     making_markets = making_markets.sort_values('gm_reward_per_100', ascending=False)
     making_markets = making_markets[making_markets['gm_reward_per_100'] >= maker_reward]
-    all_markets = get_combined_markets(new_df, making_markets, sel_df)    
+    all_markets = get_combined_markets(new_df, making_markets, sel_df)
 
     return all_data, all_markets

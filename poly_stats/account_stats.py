@@ -32,7 +32,7 @@ def get_all_orders(client):
         return orders_df
     else:
         return pd.DataFrame()
-    
+
 def get_all_positions(client):
     try:
         positions = client.get_all_positions()
@@ -41,7 +41,7 @@ def get_all_positions(client):
         return positions
     except:
         return pd.DataFrame()
-    
+
 def combine_dfs(orders_df, positions, markets_df, selected_df):
     merged_df = orders_df.merge(positions, left_on=['asset_id'], right_on=['asset'], how='outer')
     merged_df['asset_id'] = merged_df['asset_id'].combine_first(merged_df['asset'])
@@ -50,11 +50,11 @@ def combine_dfs(orders_df, positions, markets_df, selected_df):
     merge_token1 = merged_df.merge(markets_df, left_on='asset_id', right_on='token1', how='inner')
     merge_token1['merged_with'] = 'token1'
 
-    # Merge with token2
+    # 与token2合并
     merge_token2 = merged_df.merge(markets_df, left_on='asset_id', right_on='token2', how='inner')
     merge_token2['merged_with'] = 'token2'
 
-    # Combine the results
+    # 合并结果
     combined_df = pd.concat([merge_token1, merge_token2])
 
     assert len(merged_df) == len(combined_df)
@@ -110,19 +110,19 @@ def update_stats_once(client):
 
     wk_sel = spreadsheet.worksheet('Selected Markets')
     selected_df = pd.DataFrame(wk_sel.get_all_records())
-    
+
     markets_df = get_markets_df(wk_full)
-    print("Got spreadsheet...")
+    print("获取了电子表格...")
 
     orders_df = get_all_orders(client)
-    print("Got Orders...")
+    print("获取了订单...")
     positions = get_all_positions(client)
-    print("Got Positions...")
+    print("获取了持仓...")
 
     if len(positions) > 0 or len(orders_df) > 0:
         combined_df = combine_dfs(orders_df, positions, markets_df, selected_df)
         earnings = get_earnings(client.client)
-        print("Got Earnings...")
+        print("获取了收益...")
         combined_df = combined_df.merge(earnings, on='question', how='left')
 
         combined_df = combined_df.fillna(0)
@@ -134,4 +134,4 @@ def update_stats_once(client):
 
         set_with_dataframe(wk_summary, combined_df, include_index=False, include_column_header=True, resize=True)
     else:
-        print("Position or order is empty")
+        print("持仓或订单为空")

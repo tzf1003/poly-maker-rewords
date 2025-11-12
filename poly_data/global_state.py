@@ -1,49 +1,49 @@
 import threading
 import pandas as pd
 
-# ============ Market Data ============
+# ============ 市场数据 ============
 
-# List of all tokens being tracked
+# 正在跟踪的所有token列表
 all_tokens = []
 
-# Mapping between tokens in the same market (YES->NO, NO->YES)
-REVERSE_TOKENS = {}  
+# 同一市场中token之间的映射（YES->NO, NO->YES）
+REVERSE_TOKENS = {}
 
-# Order book data for all markets
-all_data = {}  
+# 所有市场的订单簿数据
+all_data = {}
 
-# Market configuration data from Google Sheets
-df = None  
+# 来自Google Sheets的市场配置数据
+df = None
 
-# ============ Client & Parameters ============
+# ============ 客户端和参数 ============
 
-# Polymarket client instance
+# Polymarket客户端实例
 client = None
 
-# Trading parameters from Google Sheets
+# 来自Google Sheets的交易参数
 params = {}
 
-# Lock for thread-safe trading operations
+# 用于线程安全交易操作的锁
 lock = threading.Lock()
 
-# ============ Trading State ============
+# ============ 交易状态 ============
 
-# Tracks trades that have been matched but not yet mined
-# Format: {"token_side": {trade_id1, trade_id2, ...}}
+# 跟踪已匹配但尚未上链的交易
+# 格式: {"token_side": {trade_id1, trade_id2, ...}}
 performing = {}
 
-# Timestamps for when trades were added to performing
-# Used to clear stale trades
+# 交易添加到performing时的时间戳
+# 用于清除陈旧交易
 performing_timestamps = {}
 
-# Timestamps for when positions were last updated
+# 持仓最后更新的时间戳
 last_trade_update = {}
 
-# Current open orders for each token
-# Format: {token_id: {'buy': {price, size}, 'sell': {price, size}}}
+# 每个token的当前未成交订单
+# 格式: {token_id: {'buy': {price, size}, 'sell': {price, size}}}
 orders = {}
 
-# Current positions for each token
-# Format: {token_id: {'size': float, 'avgPrice': float}}
+# 每个token的当前持仓
+# 格式: {token_id: {'size': float, 'avgPrice': float}}
 positions = {}
 
