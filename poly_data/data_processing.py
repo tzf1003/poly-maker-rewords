@@ -18,9 +18,12 @@ def process_book_data(asset, json_data):
     global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in json_data['bids']})
     global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in json_data['asks']})
 
-def process_price_change(asset, side, price_level, new_size):
-    if asset_id != global_state.all_data[asset]['asset_id']:
-        return  # 跳过No token的更新以防止重复更新
+def process_price_change(asset, side, price_level, new_size, asset_id=None):
+    # 如果提供了asset_id，检查是否匹配（跳过No token的更新以防止重复更新）
+    if asset_id is not None and asset in global_state.all_data:
+        if asset_id != global_state.all_data[asset]['asset_id']:
+            return
+
     if side == 'bids':
         book = global_state.all_data[asset]['bids']
     else:

@@ -36,7 +36,11 @@ async def connect_market_websocket(chunk):
                 message = await websocket.recv()
                 json_data = json.loads(message)
                 # 处理订单簿更新并根据需要触发交易
-                process_data(json_data)
+                # WebSocket 可能返回单个对象或对象列表
+                if isinstance(json_data, list):
+                    process_data(json_data)
+                else:
+                    process_data([json_data])
         except websockets.ConnectionClosed:
             print("市场websocket连接已关闭")
             print(traceback.format_exc())

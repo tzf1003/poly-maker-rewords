@@ -188,9 +188,10 @@ def get_buy_sell_amount(position, bid_price, row, other_token_position=0):
 
     # 对低价资产应用乘数
     if bid_price < 0.1 and buy_amount > 0:
-        if row['multiplier'] != '':
-            print(f"将买入数量乘以 {int(row['multiplier'])}")
-            buy_amount = buy_amount * int(row['multiplier'])
+        multiplier = row.get('multiplier', '')
+        if multiplier != '' and multiplier is not None:
+            print(f"将买入数量乘以 {int(multiplier)}")
+            buy_amount = buy_amount * int(multiplier)
 
     return buy_amount, sell_amount
 

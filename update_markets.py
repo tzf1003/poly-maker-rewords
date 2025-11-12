@@ -6,6 +6,14 @@ from data_updater.find_markets import get_sel_df, get_all_markets, get_all_resul
 from gspread_dataframe import set_with_dataframe
 import traceback
 
+# 导入 AI 市场选择器
+try:
+    from ai_market_selector import run_ai_selector
+    AI_SELECTOR_AVAILABLE = True
+except ImportError:
+    print("⚠️  AI 市场选择器不可用，将跳过自动选择")
+    AI_SELECTOR_AVAILABLE = False
+
 # 初始化全局变量
 spreadsheet = get_spreadsheet()
 client = get_clob_client()
@@ -120,6 +128,21 @@ def fetch_and_process_data():
         update_sheet(new_df, wk_all)
         update_sheet(volatility_df, wk_vol)
         update_sheet(m_data, wk_full)
+
+        # 市场波动率检测完成后，调用 AI 市场选择器
+        if AI_SELECTOR_AVAILABLE:
+            print("\n" + "=" * 80)
+            print("🤖 启动 AI 市场选择器...")
+            print("=" * 80)
+            try:
+                # 使用默认配置运行 AI 选择器
+                run_ai_selector(config=None)
+                print("✅ AI 市场选择完成")
+            except Exception as ai_error:
+                print(f"⚠️  AI 市场选择失败: {ai_error}")
+                traceback.print_exc()
+        else:
+            print("⚠️  跳过 AI 市场选择（AI 选择器不可用）")
     else:
         print(f'{pd.to_datetime("now")}: 由于长度为{len(new_df)}，未更新表格。')
 
