@@ -101,9 +101,12 @@ class ReadOnlyWorksheet:
                     response = requests.get(csv_url, timeout=30)
                     response.raise_for_status()
 
-                    # 将CSV数据读入DataFrame
+                    # 确保响应使用 UTF-8 编码
+                    response.encoding = 'utf-8'
+
+                    # 将CSV数据读入DataFrame，明确指定 UTF-8 编码
                     from io import StringIO
-                    df = pd.read_csv(StringIO(response.text))
+                    df = pd.read_csv(StringIO(response.text), encoding='utf-8')
 
                     # 检查是否获得了有意义的数据（不是空的或错误响应）
                     if not df.empty and len(df.columns) > 1:

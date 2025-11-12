@@ -147,7 +147,14 @@ async def perform_trade(market):
         try:
             client = global_state.client
             # 从配置中获取市场详情
-            row = global_state.df[global_state.df['condition_id'] == market].iloc[0]
+            filtered_df = global_state.df[global_state.df['condition_id'] == market]
+
+            # 检查是否找到了对应的市场数据
+            if filtered_df.empty:
+                print(f"警告: 在配置中未找到市场 {market}，跳过交易")
+                return
+
+            row = filtered_df.iloc[0]
             # 从tick_size确定小数精度
             round_length = len(str(row['tick_size']).split(".")[1])
 

@@ -7,7 +7,7 @@ AI 自动化市场选择器
 import os
 import json
 import pandas as pd
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
 # LangChain imports
@@ -32,11 +32,12 @@ def get_wallet_balance():
     """获取钱包余额"""
     try:
         client = PolymarketClient()
-        balance = client.get_balance()
+        # 使用 get_total_balance() 获取 USDC 余额 + 持仓价值
+        balance = client.get_total_balance()
         return float(balance)
     except Exception as e:
         print(f"⚠️  无法获取钱包余额: {e}")
-        return 20.0  # 默认值
+        return 200.0  # 默认值
 
 
 def get_liquidity_markets(sheet_name='Volatility Markets'):
@@ -86,12 +87,12 @@ def get_hyperparameters():
 
 
 @tool
-def update_selected_markets(markets: List[Dict[str, Any]]) -> str:
+def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> str:
     """
     更新 Google Sheets 中的 Selected Markets 工作表
 
     参数:
-        markets: 市场列表（必须提供，即使是空列表）。每个市场包含:
+        markets: 市场列表。每个市场包含:
             - question: 市场问题
             - max_size: 最大持仓
             - trade_size: 每次交易规模
@@ -105,58 +106,112 @@ def update_selected_markets(markets: List[Dict[str, Any]]) -> str:
     返回:
         成功或失败的消息
     """
+    # 如果 markets 为 None，设置为空列表
+    if markets is None:
+        markets = []
+
+    # 🔍 调试日志：打印接收到的原始数据
+    print("\n" + "="*80)
+    print("🔍 DEBUG: update_selected_markets 接收到的参数")
+    print("="*80)
+    for i, market in enumerate(markets, 1):
+        question = market.get('question', '')
+        print(f"\n市场 {i}:")
+        print(f"  question (type={type(question).__name__}): {repr(question)}")
+        print(f"  question (UTF-8 bytes): {question.encode('utf-8')}")
+        # 打印每个字符的 Unicode 码点
+        print(f"  Unicode 码点: {[f'U+{ord(c):04X}' for c in question[:50]]}")
+    print("="*80 + "\n")
+
     try:
         global _spreadsheet
-        
+
         if _spreadsheet is None:
             _spreadsheet = get_spreadsheet(read_only=False)
-        
+
         ws = _spreadsheet.worksheet('Selected Markets')
-        
-        # 清空现有数据（保留表头）
+
+        # 清空现有数据
         ws.clear()
-        
-        # 写入表头
+
+        # 准备所有数据（包括表头）
         headers = ['question', 'max_size', 'trade_size', 'param_type', 'comments']
-        ws.append_row(headers)
-        
-        # 写入新数据
+        all_rows = [headers]
+
+        # 添加市场数据
         for market in markets:
             row = [
-                market.get('question', ''),
+                str(market.get('question', '')),  # 确保是字符串
                 market.get('max_size', 0),
                 market.get('trade_size', 0),
-                market.get('param_type', 'mid'),
-                market.get('comments', '')
+                str(market.get('param_type', 'mid')),
+                str(market.get('comments', ''))
             ]
-            ws.append_row(row)
-        
+            all_rows.append(row)
+
+        # 使用 batch_update 一次性写入所有数据，避免特殊字符转义问题
+        # 指定 value_input_option='RAW' 保持原始字符串格式
+        ws.update(values=all_rows, range_name='A1', value_input_option='RAW')
+
         return f"✅ 成功更新 {len(markets)} 个市场到 Selected Markets 工作表"
-        
+
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"❌ 更新失败详情:\n{error_detail}")
         return f"❌ 更新失败: {str(e)}"
 
 
-def format_markets_for_prompt(df: pd.DataFrame, limit: int = 50) -> str:
+def format_markets_for_prompt(df: pd.DataFrame, limit: int = 50, debug: bool = False) -> str:
     """格式化市场数据用于提示词"""
     if len(df) == 0:
         return "（无数据）"
-    
+
     # 选择关键字段
     columns = [
-        'question', 'spread', 'rewards_daily_rate', 'volatility_sum', 
+        'question', 'spread', 'rewards_daily_rate', 'volatility_sum',
         'volatilty/reward', 'min_size', 'best_bid', 'best_ask',
         '1_hour', '3_hour', '6_hour', '12_hour', '24_hour'
     ]
-    
+
     # 过滤存在的列
     available_columns = [col for col in columns if col in df.columns]
-    
+
     # 限制数量
     df_limited = df[available_columns].head(limit)
-    
+
+    # 🔍 调试日志：打印 DataFrame 中的特殊字符
+    if debug:
+        print("\n" + "="*80)
+        print("🔍 DEBUG: format_markets_for_prompt - DataFrame 中的问题文本")
+        print("="*80)
+        for idx, row in df_limited.head(3).iterrows():
+            question = row['question']
+            print(f"\n行 {idx}:")
+            print(f"  question: {repr(question)}")
+            print(f"  UTF-8 bytes: {question.encode('utf-8')}")
+            print(f"  Unicode 码点: {[f'U+{ord(c):04X}' for c in question[:50]]}")
+        print("="*80 + "\n")
+
     # 转换为 Markdown 表格
-    return df_limited.to_markdown(index=False)
+    markdown = df_limited.to_markdown(index=False)
+
+    # 🔍 调试日志：打印 Markdown 表格中的特殊字符
+    if debug:
+        print("\n" + "="*80)
+        print("🔍 DEBUG: format_markets_for_prompt - Markdown 表格")
+        print("="*80)
+        # 只打印前 500 个字符
+        print(markdown[:500])
+        print("\n检查特殊字符编码:")
+        # 查找包含特殊字符的行
+        for line in markdown.split('\n')[:10]:
+            if '–' in line or 'á' in line or 'í' in line:
+                print(f"  {repr(line)}")
+                print(f"  UTF-8: {line.encode('utf-8')}")
+        print("="*80 + "\n")
+
+    return markdown
 
 
 def format_hyperparameters(df: pd.DataFrame) -> str:
@@ -178,13 +233,18 @@ def format_hyperparameters(df: pd.DataFrame) -> str:
 
 def create_ai_agent(config: Dict[str, Any]):
     """创建 AI Agent"""
-    
+
     # 初始化 OpenAI 客户端
+    # 注意：设置 model_kwargs 来确保正确的 JSON 编码
     llm = ChatOpenAI(
         model=os.getenv('OPENAI_MODEL', 'gpt-4'),
         api_key=os.getenv('OPENAI_API_KEY'),
         base_url=os.getenv('OPENAI_API_BASE'),
-        temperature=0.3  # 降低温度以获得更稳定的输出
+        temperature=0.3,  # 降低温度以获得更稳定的输出
+        model_kwargs={
+            # 强制使用严格的 JSON 模式，避免字符编码问题
+            "response_format": {"type": "text"}
+        }
     )
     
     # 定义工具
@@ -200,15 +260,21 @@ def create_ai_agent(config: Dict[str, Any]):
     # 创建 agent
     agent = create_tool_calling_agent(llm, tools, prompt)
     
+    # 创建调试 callback（如果启用调试模式）
+    callbacks = []
+    if config.get('debug', False):
+        callbacks.append(DebugCallbackHandler())
+
     # 创建 executor
     agent_executor = AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=5
+        max_iterations=5,
+        callbacks=callbacks if callbacks else None
     )
-    
+
     return agent_executor
 
 
@@ -242,6 +308,10 @@ def run_ai_selector(config: Dict[str, Any] = None):
     
     # 构建用户提示词
     print("\n🔧 构建提示词...")
+
+    # 启用调试模式
+    DEBUG_MODE = config.get('debug', True)
+
     user_prompt = ai_config.USER_PROMPT_TEMPLATE.format(
         wallet_balance=config['wallet_balance'],
         risk_preference=config['risk_preference'],
@@ -249,8 +319,8 @@ def run_ai_selector(config: Dict[str, Any] = None):
         max_size_per_market=config['max_size_per_market'],
         trade_size=config['trade_size'],
         additional_preferences=config.get('additional_preferences', ''),
-        liquidity_markets=format_markets_for_prompt(liquidity_markets_df),
-        current_selections=format_markets_for_prompt(current_selections_df, limit=100),
+        liquidity_markets=format_markets_for_prompt(liquidity_markets_df, debug=DEBUG_MODE),
+        current_selections=format_markets_for_prompt(current_selections_df, limit=100, debug=DEBUG_MODE),
         hyperparameters=format_hyperparameters(hyperparameters_df)
     )
     

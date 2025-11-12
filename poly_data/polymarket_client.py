@@ -169,7 +169,11 @@ class PolymarketClient:
             float: USDC计价的总持仓价值
         """
         res = requests.get(f'https://data-api.polymarket.com/value?user={self.browser_wallet}')
-        return float(res.json()['value'])
+        data = res.json()
+        # API 返回的是列表，取第一个元素的 value 字段
+        if isinstance(data, list) and len(data) > 0:
+            return float(data[0]['value'])
+        return 0.0
 
     def get_total_balance(self):
         """
