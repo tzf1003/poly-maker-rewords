@@ -12,6 +12,10 @@ import poly_data.CONSTANTS as CONSTANTS
 # 导入交易工具函数
 from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up
 from poly_data.data_utils import get_position, get_order, set_position
+from poly_data.logger import get_logger
+
+# 创建交易日志记录器
+trading_logger = get_logger('trading', console_output=True)
 
 # 创建目录用于存储持仓风险信息
 if not os.path.exists('positions/'):
@@ -46,10 +50,10 @@ def send_buy_order(order):
     )
 
     if should_cancel and (existing_buy_size > 0 or order['orders']['sell']['size'] > 0):
-        print(f"取消买单 - 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
+        trading_logger.info(f"取消买单 - 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         client.cancel_all_asset(order['token'])
     elif not should_cancel:
-        print(f"保持现有买单 - 微小变化: 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
+        trading_logger.debug(f"保持现有买单 - 微小变化: 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         return  # 如果现有订单没问题就不下新单
 
     # 根据市场价差计算最低可接受价格
@@ -64,8 +68,7 @@ def send_buy_order(order):
     if trade:
         # 只下价格在0.1到0.9之间的订单，避免极端持仓
         if order['price'] >= 0.1 and order['price'] < 0.9:
-            print(f'创建新订单，数量 {order["size"]}，价格 {order["price"]}')
-            print(order['token'], 'BUY', order['price'], order['size'])
+            trading_logger.info(f'创建买单 - Token: {order["token"]}, 数量: {order["size"]}, 价格: {order["price"]}')
             client.create_order(
                 order['token'],
                 'BUY',
@@ -74,9 +77,9 @@ def send_buy_order(order):
                 True if order['neg_risk'] == 'TRUE' else False
             )
         else:
-            print("不创建买单，因为价格超出可接受范围(0.1-0.9)")
+            trading_logger.warning(f"不创建买单，因为价格 {order['price']} 超出可接受范围(0.1-0.9)")
     else:
-        print(f'不创建新订单，因为订单价格 {order["price"]} 低于激励起始价格 {incentive_start}。中间价为 {order["mid_price"]}')
+        trading_logger.debug(f'不创建买单，订单价格 {order["price"]} 低于激励起始价格 {incentive_start}，中间价: {order["mid_price"]}')
 
 
 def send_sell_order(order):
@@ -107,13 +110,13 @@ def send_sell_order(order):
     )
 
     if should_cancel and (existing_sell_size > 0 or order['orders']['buy']['size'] > 0):
-        print(f"取消卖单 - 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
+        trading_logger.info(f"取消卖单 - 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         client.cancel_all_asset(order['token'])
     elif not should_cancel:
-        print(f"保持现有卖单 - 微小变化: 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
+        trading_logger.debug(f"保持现有卖单 - 微小变化: 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         return  # 如果现有订单没问题就不下新单
 
-    print(f'创建新订单，数量 {order["size"]}，价格 {order["price"]}')
+    trading_logger.info(f'创建卖单 - Token: {order["token"]}, 数量: {order["size"]}, 价格: {order["price"]}')
     client.create_order(
         order['token'],
         'SELL',
@@ -151,7 +154,7 @@ async def perform_trade(market):
 
             # 检查是否找到了对应的市场数据
             if filtered_df.empty:
-                print(f"警告: 在配置中未找到市场 {market}，跳过交易")
+                trading_logger.warning(f"在配置中未找到市场 {market}，跳过交易")
                 return
 
             row = filtered_df.iloc[0]
@@ -166,7 +169,7 @@ async def perform_trade(market):
                 {'name': 'token1', 'token': row['token1'], 'answer': row['answer1']},
                 {'name': 'token2', 'token': row['token2'], 'answer': row['answer2']}
             ]
-            print(f"\n\n{pd.Timestamp.utcnow().tz_localize(None)}: {row['question']}")
+            trading_logger.info(f"\n{pd.Timestamp.utcnow().tz_localize(None)}: {row['question']}")
 
             # 获取两个结果的当前持仓
             pos_1 = get_position(row['token1'])['size']
@@ -185,7 +188,7 @@ async def perform_trade(market):
                 scaled_amt = amount_to_merge / 10**6
 
                 if scaled_amt > CONSTANTS.MIN_MERGE_SIZE:
-                    print(f"持仓1规模为 {pos_1}，持仓2规模为 {pos_2}。正在合并持仓")
+                    trading_logger.info(f"持仓1规模为 {pos_1}，持仓2规模为 {pos_2}。正在合并持仓")
                     # 执行合并操作
                     client.merge_positions(amount_to_merge, market, row['neg_risk'] == 'TRUE')
                     # 更新我们的本地持仓跟踪
@@ -258,7 +261,7 @@ async def perform_trade(market):
                 mid_price = (top_bid + top_ask) / 2
 
                 # 记录此结果的市场条件
-                print(f"\n对于 {detail['answer']}. 订单: {orders} 持仓: {position}, "
+                trading_logger.info(f"\n对于 {detail['answer']}. 订单: {orders} 持仓: {position}, "
                       f"平均价: {avgPrice}, 最佳买价: {best_bid}, 最佳卖价: {best_ask}, "
                       f"买单价格: {bid_price}, 卖单价格: {ask_price}, 中间价: {mid_price}")
 
@@ -283,7 +286,7 @@ async def perform_trade(market):
                     'row': row
                 }
 
-                print(f"持仓: {position}, 相反持仓: {other_position}, "
+                trading_logger.info(f"持仓: {position}, 相反持仓: {other_position}, "
                       f"交易规模: {row['trade_size']}, 最大规模: {max_size}, "
                       f"买入数量: {buy_amount}, 卖出数量: {sell_amount}")
 
@@ -294,7 +297,7 @@ async def perform_trade(market):
                 if sell_amount > 0:
                     # 如果没有平均价格（没有真实持仓）则跳过
                     if avgPrice == 0:
-                        print("平均价为0。跳过")
+                        trading_logger.warning("平均价为0。跳过")
                         continue
 
                     order['size'] = sell_amount
@@ -310,7 +313,7 @@ async def perform_trade(market):
                     # 计算持仓的当前盈亏
                     pnl = (mid_price - avgPrice) / avgPrice * 100
 
-                    print(f"中间价: {mid_price}, 价差: {spread}, 盈亏: {pnl}")
+                    trading_logger.info(f"中间价: {mid_price}, 价差: {spread}, 盈亏: {pnl}")
 
                     # 准备风险详情用于跟踪
                     risk_details = {
@@ -332,7 +335,7 @@ async def perform_trade(market):
                     if (pnl < params['stop_loss_threshold'] and spread <= params['spread_threshold']) or row['3_hour'] > params['volatility_threshold']:
                         risk_details['msg'] = (f"卖出 {pos_to_sell}，因为价差为 {spread}，盈亏为 {pnl}，"
                                               f"比率为 {ratio}，3小时波动率为 {row['3_hour']}")
-                        print("止损触发: ", risk_details['msg'])
+                        trading_logger.warning(f"止损触发: {risk_details['msg']}")
 
                         # 以市场最佳买价卖出以确保成交
                         order['size'] = pos_to_sell
@@ -342,7 +345,7 @@ async def perform_trade(market):
                         risk_details['sleep_till'] = str(pd.Timestamp.utcnow().tz_localize(None) +
                                                         pd.Timedelta(hours=params['sleep_period']))
 
-                        print("风险规避中")
+                        trading_logger.warning("风险规避中")
                         send_sell_order(order)
                         client.cancel_all_market(market)
 
@@ -382,19 +385,24 @@ async def perform_trade(market):
                         start_trading_at = pd.to_datetime(risk_details['sleep_till'])
                         current_time = pd.Timestamp.utcnow().tz_localize(None)
 
-                        print(risk_details, current_time, start_trading_at)
+                        trading_logger.debug(f"风险详情: {risk_details}, 当前时间: {current_time}, 开始交易时间: {start_trading_at}")
                         if current_time < start_trading_at:
                             send_buy = False
-                            print(f"不发送买单，因为最近风险规避。"
+                            trading_logger.warning(f"不发送买单，因为最近风险规避。"
                                  f"风险规避时间 {risk_details['time']}")
 
                     # 只有在不处于风险规避期时才继续
                     if send_buy:
                         # 如果波动性高或价格远离参考值，不要买入
                         if row['3_hour'] > params['volatility_threshold'] or price_change >= 0.05:
-                            print(f'3小时波动率 {row["3_hour"]} 大于最大波动率 '
-                                  f'{params["volatility_threshold"]} 或价格 {order["price"]} 超出 '
-                                  f'{sheet_value} 的0.05范围。取消所有订单')
+                            # 明确指出触发原因
+                            reasons = []
+                            if row['3_hour'] > params['volatility_threshold']:
+                                reasons.append(f"3小时波动率 {row['3_hour']} 超过阈值 {params['volatility_threshold']}")
+                            if price_change >= 0.05:
+                                reasons.append(f"价格 {order['price']} 偏离参考值 {sheet_value} 达 {price_change:.4f} (>= 0.05)")
+
+                            trading_logger.warning(f'取消所有订单，原因: {" 且 ".join(reasons)}')
                             client.cancel_all_asset(order['token'])
                         else:
                             # 检查反向持仓（持有相反结果）
@@ -403,9 +411,9 @@ async def perform_trade(market):
 
                             # 如果我们有显著的对立持仓，不要再买入
                             if rev_pos['size'] > row['min_size']:
-                                print("跳过创建新买单，因为存在反向持仓")
+                                trading_logger.info("跳过创建新买单，因为存在反向持仓")
                                 if orders['buy']['size'] > CONSTANTS.MIN_MERGE_SIZE:
-                                    print("取消买单，因为存在反向持仓")
+                                    trading_logger.info("取消买单，因为存在反向持仓")
                                     client.cancel_all_asset(order['token'])
 
                                 continue
@@ -413,22 +421,22 @@ async def perform_trade(market):
                             # 检查市场买卖量比率
                             if overall_ratio < 0:
                                 send_buy = False
-                                print(f"不发送买单，因为总体比率为 {overall_ratio}")
+                                trading_logger.info(f"不发送买单，因为总体比率为 {overall_ratio}")
                                 client.cancel_all_asset(order['token'])
                             else:
                                 # 如果满足以下任一条件，则下新买单：
                                 # 1. 我们可以获得比当前订单更好的价格
                                 if best_bid > orders['buy']['price']:
-                                    print(f"为 {token} 发送买单，因为价格更好。"
-                                          f"订单如下: {orders['buy']}。最佳买价: {best_bid}")
+                                    trading_logger.info(f"为 {token} 发送买单，因为价格更好。"
+                                          f"订单: {orders['buy']}，最佳买价: {best_bid}")
                                     send_buy_order(order)
                                 # 2. 当前持仓 + 订单不足以达到max_size
                                 elif position + orders['buy']['size'] < 0.95 * max_size:
-                                    print(f"为 {token} 发送买单，因为持仓+规模不足")
+                                    trading_logger.info(f"为 {token} 发送买单，因为持仓+规模不足")
                                     send_buy_order(order)
                                 # 3. 我们当前的订单太大，需要调整规模
                                 elif orders['buy']['size'] > order['size'] * 1.01:
-                                    print(f"重新发送买单，因为未成交订单太大")
+                                    trading_logger.info(f"重新发送买单，因为未成交订单太大")
                                     send_buy_order(order)
                                 # 注释掉的逻辑：当市场条件变化时取消订单
                                 # elif best_bid_size < orders['buy']['size'] * 0.98 and abs(best_bid - second_best_bid) > 0.03:
@@ -452,12 +460,12 @@ async def perform_trade(market):
                     # 更新卖单如果：
                     # 1. 当前订单价格与目标价格差异显著
                     if diff > 2:
-                        print(f"为 {token} 发送卖单，因为当前订单价格 "
+                        trading_logger.info(f"为 {token} 发送卖单，因为当前订单价格 "
                               f"{order_price} 偏离止盈价格 {tp_price}，差异为 {diff}")
                         send_sell_order(order)
                     # 2. 当前订单规模对于我们的持仓来说太小
                     elif orders['sell']['size'] < position * 0.97:
-                        print(f"为 {token} 发送卖单，因为卖出规模不足。"
+                        trading_logger.info(f"为 {token} 发送卖单，因为卖出规模不足。"
                               f"持仓: {position}, 卖出规模: {orders['sell']['size']}")
                         send_sell_order(order)
 
@@ -470,8 +478,8 @@ async def perform_trade(market):
                     #     send_sell_order(order)
 
         except Exception as ex:
-            print(f"为 {market} 执行交易时出错: {ex}")
-            traceback.print_exc()
+            trading_logger.error(f"为 {market} 执行交易时出错: {ex}")
+            trading_logger.error(traceback.format_exc())
 
         # 清理内存并引入小延迟
         gc.collect()

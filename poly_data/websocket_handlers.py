@@ -4,7 +4,11 @@ import websockets                  # WebSocket客户端
 import traceback                   # 异常处理
 
 from poly_data.data_processing import process_data, process_user_data
+from poly_data.logger import get_logger
 import poly_data.global_state as global_state
+
+# 创建WebSocket日志记录器
+websocket_logger = get_logger('websocket', console_output=True)
 
 async def connect_market_websocket(chunk):
     """
@@ -27,8 +31,7 @@ async def connect_market_websocket(chunk):
         message = {"assets_ids": chunk}
         await websocket.send(json.dumps(message))
 
-        print("\n")
-        print(f"已发送市场订阅消息: {message}")
+        websocket_logger.info(f"已发送市场订阅消息: {message}")
 
         try:
             # 无限期处理传入的市场数据
@@ -42,11 +45,11 @@ async def connect_market_websocket(chunk):
                 else:
                     process_data([json_data])
         except websockets.ConnectionClosed:
-            print("市场websocket连接已关闭")
-            print(traceback.format_exc())
+            websocket_logger.warning("市场websocket连接已关闭")
+            websocket_logger.debug(traceback.format_exc())
         except Exception as e:
-            print(f"市场websocket异常: {e}")
-            print(traceback.format_exc())
+            websocket_logger.error(f"市场websocket异常: {e}")
+            websocket_logger.error(traceback.format_exc())
         finally:
             # 尝试重新连接前的短暂延迟
             await asyncio.sleep(5)
@@ -79,8 +82,7 @@ async def connect_user_websocket():
         # 发送身份验证消息
         await websocket.send(json.dumps(message))
 
-        print("\n")
-        print(f"已发送用户订阅消息")
+        websocket_logger.info("已发送用户订阅消息")
 
         try:
             # 无限期处理传入的用户数据
@@ -90,11 +92,11 @@ async def connect_user_websocket():
                 # 处理交易和订单更新
                 process_user_data(json_data)
         except websockets.ConnectionClosed:
-            print("用户websocket连接已关闭")
-            print(traceback.format_exc())
+            websocket_logger.warning("用户websocket连接已关闭")
+            websocket_logger.debug(traceback.format_exc())
         except Exception as e:
-            print(f"用户websocket异常: {e}")
-            print(traceback.format_exc())
+            websocket_logger.error(f"用户websocket异常: {e}")
+            websocket_logger.error(traceback.format_exc())
         finally:
             # 尝试重新连接前的短暂延迟
             await asyncio.sleep(5)

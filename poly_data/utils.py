@@ -2,10 +2,16 @@ import json
 from poly_utils.google_utils import get_spreadsheet
 import pandas as pd
 import os
+from poly_data.network_utils import retry_on_network_error
+from poly_data.logger import get_logger
+
+# 创建工具日志记录器
+utils_logger = get_logger('utils', console_output=True)
 
 def pretty_print(txt, dic):
-    print("\n", txt, json.dumps(dic, indent=4))
+    utils_logger.info(f"{txt}\n{json.dumps(dic, indent=4)}")
 
+@retry_on_network_error(max_retries=3, delay=2)
 def get_sheet_df(read_only=None):
     """
     获取表格数据，可选只读模式
@@ -21,12 +27,12 @@ def get_sheet_df(read_only=None):
         creds_file = 'credentials.json' if os.path.exists('credentials.json') else '../credentials.json'
         read_only = not os.path.exists(creds_file)
         if read_only:
-            print("未找到凭证，使用只读模式")
+            utils_logger.info("未找到凭证，使用只读模式")
 
     try:
         spreadsheet = get_spreadsheet(read_only=read_only)
     except FileNotFoundError:
-        print("未找到凭证，回退到只读模式")
+        utils_logger.warning("未找到凭证，回退到只读模式")
         spreadsheet = get_spreadsheet(read_only=True)
 
     wk = spreadsheet.worksheet(sel)

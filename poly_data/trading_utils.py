@@ -1,6 +1,10 @@
 import math
 from poly_data.data_utils import update_positions
+from poly_data.logger import get_logger
 import poly_data.global_state as global_state
+
+# 创建交易工具日志记录器
+trading_utils_logger = get_logger('trading_utils', console_output=True)
 
 # def get_avgPrice(position, assetId):
 #     curr_global = global_state.all_positions[global_state.all_positions['asset'] == str(assetId)]
@@ -190,7 +194,7 @@ def get_buy_sell_amount(position, bid_price, row, other_token_position=0):
     if bid_price < 0.1 and buy_amount > 0:
         multiplier = row.get('multiplier', '')
         if multiplier != '' and multiplier is not None:
-            print(f"将买入数量乘以 {int(multiplier)}")
+            trading_utils_logger.info(f"将买入数量乘以 {int(multiplier)}")
             buy_amount = buy_amount * int(multiplier)
 
     return buy_amount, sell_amount

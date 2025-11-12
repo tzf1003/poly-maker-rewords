@@ -7,6 +7,10 @@ from trading import perform_trade
 import time
 import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
+from poly_data.logger import get_logger
+
+# 创建数据处理日志记录器
+processing_logger = get_logger('data_processing', console_output=True)
 
 def process_book_data(asset, json_data):
     global_state.all_data[asset] = {
@@ -98,7 +102,7 @@ def process_user_data(rows):
                 is_user_maker = False
                 for maker_order in row['maker_orders']:
                     if maker_order['maker_address'].lower() == global_state.client.browser_wallet.lower():
-                        print("用户是做市方")
+                        processing_logger.debug("用户是做市方")
                         size = float(maker_order['matched_amount'])
                         price = float(maker_order['price'])
 
@@ -113,43 +117,46 @@ def process_user_data(rows):
                 if not is_user_maker:
                     size = float(row['size'])
                     price = float(row['price'])
-                    print("用户是吃单方")
+                    processing_logger.debug("用户是吃单方")
 
-                print("交易事件: ", row['market'], "ID: ", row['id'], "状态: ", row['status'], " 方向: ", row['side'], "  做市方结果: ", maker_outcome, " 吃单方结果: ", taker_outcome, " 处理后方向: ", side, " 数量: ", size)
+                processing_logger.info(f"交易事件 - 市场: {row['market']}, ID: {row['id']}, 状态: {row['status']}, "
+                                      f"方向: {row['side']}, 做市方结果: {maker_outcome}, 吃单方结果: {taker_outcome}, "
+                                      f"处理后方向: {side}, 数量: {size}")
 
 
                 if row['status'] == 'CONFIRMED' or row['status'] == 'FAILED' :
                     if row['status'] == 'FAILED':
-                        print(f"{token} 的交易失败，减少中")
+                        processing_logger.warning(f"{token} 的交易失败，减少中")
                         asyncio.create_task(asyncio.sleep(2))
                         update_positions()
                     else:
                         remove_from_performing(col, row['id'])
-                        print("已确认。执行中数量为 ", len(global_state.performing[col]))
-                        print("最后交易更新为 ", global_state.last_trade_update)
-                        print("执行中为 ", global_state.performing)
-                        print("执行中时间戳为 ", global_state.performing_timestamps)
+                        processing_logger.info(f"已确认。执行中数量: {len(global_state.performing[col])}")
+                        processing_logger.debug(f"最后交易更新: {global_state.last_trade_update}")
+                        processing_logger.debug(f"执行中: {global_state.performing}")
+                        processing_logger.debug(f"执行中时间戳: {global_state.performing_timestamps}")
 
                         asyncio.create_task(perform_trade(market))
 
                 elif row['status'] == 'MATCHED':
                     add_to_performing(col, row['id'])
 
-                    print("已匹配。执行中数量为 ", len(global_state.performing[col]))
+                    processing_logger.info(f"已匹配。执行中数量: {len(global_state.performing[col])}")
                     set_position(token, side, size, price)
-                    print("匹配后持仓为 ", global_state.positions[str(token)])
-                    print("最后交易更新为 ", global_state.last_trade_update)
-                    print("执行中为 ", global_state.performing)
-                    print("执行中时间戳为 ", global_state.performing_timestamps)
+                    processing_logger.info(f"匹配后持仓: {global_state.positions[str(token)]}")
+                    processing_logger.debug(f"最后交易更新: {global_state.last_trade_update}")
+                    processing_logger.debug(f"执行中: {global_state.performing}")
+                    processing_logger.debug(f"执行中时间戳: {global_state.performing_timestamps}")
                     asyncio.create_task(perform_trade(market))
                 elif row['status'] == 'MINED':
                     remove_from_performing(col, row['id'])
 
             elif row['event_type'] == 'order':
-                print("订单事件: ", row['market'], " 状态: ",  row['status'], " 类型: ", row['type'], " 方向: ", side, "  原始数量: ", row['original_size'], " 已匹配数量: ", row['size_matched'])
+                processing_logger.info(f"订单事件 - 市场: {row['market']}, 状态: {row['status']}, 类型: {row['type']}, "
+                                      f"方向: {side}, 原始数量: {row['original_size']}, 已匹配数量: {row['size_matched']}")
 
                 set_order(token, side, float(row['original_size']) - float(row['size_matched']), row['price'])
                 asyncio.create_task(perform_trade(market))
 
     else:
-        print(f"收到 {market} 的用户数据，但不在列表中")
+        processing_logger.warning(f"收到 {market} 的用户数据，但不在列表中")

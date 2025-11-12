@@ -21,6 +21,13 @@ from py_clob_client.clob_types import OpenOrderParams
 # 智能合约ABIs
 from poly_data.abis import NegRiskAdapterABI, ConditionalTokenABI, erc20_abi
 
+# 网络工具和日志
+from poly_data.network_utils import retry_on_network_error
+from poly_data.logger import get_logger
+
+# 创建客户端日志记录器
+client_logger = get_logger('polymarket_client', console_output=True)
+
 # 加载环境变量
 load_dotenv()
 
@@ -52,7 +59,7 @@ class PolymarketClient:
         browser_address = os.getenv("BROWSER_ADDRESS")
 
         # 不打印敏感的钱包信息
-        print("正在初始化Polymarket客户端...")
+        client_logger.info("正在初始化Polymarket客户端...")
         chain_id=POLYGON
         self.browser_wallet=Web3.to_checksum_address(browser_address)
 
@@ -135,7 +142,7 @@ class PolymarketClient:
             resp = self.client.post_order(signed_order)
             return resp
         except Exception as ex:
-            print(ex)
+            client_logger.error(f"创建订单失败: {ex}")
             return {}
 
     def get_order_book(self, market):
@@ -161,6 +168,7 @@ class PolymarketClient:
         """
         return self.usdc_contract.functions.balanceOf(self.browser_wallet).call() / 10**6
 
+    @retry_on_network_error(max_retries=3, delay=2)
     def get_pos_balance(self):
         """
         获取连接钱包所有持仓的总价值。
@@ -168,7 +176,7 @@ class PolymarketClient:
         返回：
             float: USDC计价的总持仓价值
         """
-        res = requests.get(f'https://data-api.polymarket.com/value?user={self.browser_wallet}')
+        res = requests.get(f'https://data-api.polymarket.com/value?user={self.browser_wallet}', timeout=10)
         data = res.json()
         # API 返回的是列表，取第一个元素的 value 字段
         if isinstance(data, list) and len(data) > 0:
@@ -226,6 +234,7 @@ class PolymarketClient:
 
         return raw_position, shares
 
+    @retry_on_network_error(max_retries=3, delay=2)
     def get_all_orders(self):
         """
         获取连接钱包的所有未成交订单。
@@ -307,17 +316,17 @@ class PolymarketClient:
 
         # 准备运行JavaScript脚本的命令
         node_command = f'node poly_merger/merge.js {amount_to_merge_str} {condition_id} {"true" if is_neg_risk_market else "false"}'
-        print(node_command)
+        client_logger.info(f"执行合并命令: {node_command}")
 
         # 运行命令并捕获输出
         result = subprocess.run(node_command, shell=True, capture_output=True, text=True)
 
         # 检查是否有错误
         if result.returncode != 0:
-            print("错误:", result.stderr)
+            client_logger.error(f"合并持仓错误: {result.stderr}")
             raise Exception(f"合并持仓时出错: {result.stderr}")
 
-        print("合并完成")
+        client_logger.info("合并完成")
 
         # 返回交易哈希或输出
         return result.stdout

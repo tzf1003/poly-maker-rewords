@@ -235,7 +235,7 @@ SYSTEM_PROMPT = """你是一个专业的 Polymarket 做市策略分析师和投�
 
 **工具参数**：
 - `markets`: 市场列表，每个市场包含：
-  - `question`: 市场问题（必须与流动性市场表中的 question 完全匹配）
+  - `row_id`: 市场在流动性市场表中的行号（从 0 开始，见表格第一列）⚠️ 必须使用 row_id，不要使用 question
   - `max_size`: 最大持仓（USDC）
   - `trade_size`: 每次交易规模（USDC）
   - `param_type`: 风险策略（very/high/mid/shit）
@@ -246,8 +246,7 @@ SYSTEM_PROMPT = """你是一个专业的 Polymarket 做市策略分析师和投�
 {{
   "markets": [
     {{
-      "question": "Will Russell 2000 close over 2,400?",
-      "max_size": 15,
+      "row_id": 5,
       "trade_size": 5,
       "param_type": "mid",
       "comments": "理由: 流动性优秀(spread 0.08), 高奖励率(40% APR), 低波动率(8.5%), 综合评分 85/100 | 置信度: 90%"
@@ -369,8 +368,8 @@ DEFAULT_CONFIG = {
     "wallet_balance": 20.0,
     "risk_preference": "保守（避免高波动市场，优先稳定收益）",
     "max_markets": 5,
-    "max_size_per_market": 300,
-    "trade_size": 20,
+    "max_size_per_market": 20,  # 调整为钱包余额以内
+    "trade_size": 20,  # 满足大多数市场的 min_size=20
     "additional_preferences": ""
 }
 

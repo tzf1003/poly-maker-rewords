@@ -24,8 +24,9 @@ import ai_config
 # 加载环境变量
 load_dotenv()
 
-# 全局变量用于存储 spreadsheet 对象
+# 全局变量用于存储 spreadsheet 对象和原始市场数据
 _spreadsheet = None
+_original_markets_df = None
 
 
 def get_wallet_balance():
@@ -93,14 +94,14 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
 
     参数:
         markets: 市场列表。每个市场包含:
-            - question: 市场问题
+            - row_id: 市场在流动性市场表中的行号（从 0 开始）
             - max_size: 最大持仓
             - trade_size: 每次交易规模
             - param_type: 风险策略
             - comments: 备注（包含理由和置信度）
 
     示例:
-        - 保持当前市场: markets=[{"question": "Market A", "max_size": 100, ...}, ...]
+        - 添加市场: markets=[{"row_id": 0, "max_size": 100, "trade_size": 50, "param_type": "mid", "comments": "..."}, ...]
         - 清空所有市场: markets=[]
 
     返回:
@@ -111,10 +112,14 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
         markets = []
 
     try:
-        global _spreadsheet
+        global _spreadsheet, _original_markets_df
 
         if _spreadsheet is None:
             _spreadsheet = get_spreadsheet(read_only=False)
+
+        # 检查原始市场数据
+        if _original_markets_df is None or len(_original_markets_df) == 0:
+            return "❌ 错误: 无法获取原始市场数据"
 
         ws = _spreadsheet.worksheet('Selected Markets')
 
@@ -126,9 +131,25 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
         all_rows = [headers]
 
         # 添加市场数据
-        for market in markets:
+        for i, market in enumerate(markets):
+            row_id = market.get('row_id')
+
+            # 验证 row_id
+            if row_id is None:
+                print(f"⚠️  警告: 市场 {i+1} 缺少 row_id，跳过")
+                continue
+
+            if not isinstance(row_id, int) or row_id < 0 or row_id >= len(_original_markets_df):
+                print(f"⚠️  警告: 市场 {i+1} 的 row_id={row_id} 无效，跳过")
+                continue
+
+            # 从原始数据中获取正确的 question
+            question = _original_markets_df.iloc[row_id]['question']
+
+            print(f"✅ 市场 {i+1}: row_id={row_id} → {question[:60]}...")
+
             row = [
-                str(market.get('question', '')),  # 确保是字符串
+                question,  # 从原始数据获取，保证正确
                 market.get('max_size', 0),
                 market.get('trade_size', 0),
                 str(market.get('param_type', 'mid')),
@@ -136,11 +157,10 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
             ]
             all_rows.append(row)
 
-        # 使用 batch_update 一次性写入所有数据，避免特殊字符转义问题
-        # 指定 value_input_option='RAW' 保持原始字符串格式
+        # 使用 batch_update 一次性写入所有数据
         ws.update(values=all_rows, range_name='A1', value_input_option='RAW')
 
-        return f"✅ 成功更新 {len(markets)} 个市场到 Selected Markets 工作表"
+        return f"✅ 成功更新 {len(all_rows)-1} 个市场到 Selected Markets 工作表"
 
     except Exception as e:
         import traceback
@@ -154,18 +174,22 @@ def format_markets_for_prompt(df: pd.DataFrame, limit: int = 50) -> str:
     if len(df) == 0:
         return "（无数据）"
 
-    # 选择关键字段
+    # 添加 row_id 列（从 0 开始的索引）
+    df_with_id = df.copy()
+    df_with_id.insert(0, 'row_id', range(len(df_with_id)))
+
+    # 选择关键字段（row_id 放在最前面）
     columns = [
-        'question', 'spread', 'rewards_daily_rate', 'volatility_sum',
+        'row_id', 'question', 'spread', 'rewards_daily_rate', 'volatility_sum',
         'volatilty/reward', 'min_size', 'best_bid', 'best_ask',
         '1_hour', '3_hour', '6_hour', '12_hour', '24_hour'
     ]
 
     # 过滤存在的列
-    available_columns = [col for col in columns if col in df.columns]
+    available_columns = [col for col in columns if col in df_with_id.columns]
 
     # 限制数量
-    df_limited = df[available_columns].head(limit)
+    df_limited = df_with_id[available_columns].head(limit)
 
     # 转换为 Markdown 表格
     return df_limited.to_markdown(index=False)
@@ -193,7 +217,7 @@ def create_ai_agent(config: Dict[str, Any]):
 
     # 初始化 OpenAI 客户端
     llm = ChatOpenAI(
-        model=os.getenv('OPENAI_MODEL', 'gpt-4'),
+        model=os.getenv('OPENAI_MODEL', 'gpt-5'),
         api_key=os.getenv('OPENAI_API_KEY'),
         base_url=os.getenv('OPENAI_API_BASE'),
         temperature=0.3  # 降低温度以获得更稳定的输出
@@ -226,28 +250,32 @@ def create_ai_agent(config: Dict[str, Any]):
 
 def run_ai_selector(config: Dict[str, Any] = None):
     """运行 AI 市场选择器"""
-    
+
     print("🤖 AI 市场选择器启动中...")
     print("=" * 80)
-    
+
     # 使用默认配置或用户提供的配置
     if config is None:
         config = ai_config.DEFAULT_CONFIG.copy()
-    
+
     # 获取钱包余额
     print("\n📊 正在获取数据...")
     wallet_balance = get_wallet_balance()
     config['wallet_balance'] = wallet_balance
     print(f"💵 钱包余额: {wallet_balance} USDC")
-    
+
     # 获取流动性市场列表
     liquidity_markets_df = get_liquidity_markets()
     print(f"📈 流动性市场数量: {len(liquidity_markets_df)}")
-    
+
+    # 保存到全局变量供修复使用
+    global _original_markets_df
+    _original_markets_df = liquidity_markets_df.copy()
+
     # 获取当前选择列表
     current_selections_df = get_current_selections()
     print(f"📋 当前选择数量: {len(current_selections_df)}")
-    
+
     # 获取超参数表
     hyperparameters_df = get_hyperparameters()
     print(f"⚙️  超参数配置: {len(hyperparameters_df)} 条")
@@ -301,8 +329,8 @@ if __name__ == '__main__':
     parser.add_argument('--max-markets', type=int,
                         default=int(os.getenv('AI_MAX_MARKETS', '3')),
                         help='最大市场数量')
-    parser.add_argument('--max-size', type=float, default=15, help='单个市场最大投入（USDC）')
-    parser.add_argument('--trade-size', type=float, default=5, help='每次交易规模（USDC）')
+    parser.add_argument('--max-size', type=float, default=20, help='单个市场最大投入（USDC）')
+    parser.add_argument('--trade-size', type=float, default=20, help='每次交易规模（USDC）')
     parser.add_argument('--preferences', type=str, default='', help='额外偏好（如：避免加密货币相关市场）')
     
     args = parser.parse_args()

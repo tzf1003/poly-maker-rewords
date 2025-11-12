@@ -1,7 +1,12 @@
 import poly_data.global_state as global_state
 from poly_data.utils import get_sheet_df
+from poly_data.logger import get_logger
 import time
-import poly_data.global_state as global_state
+
+# 创建数据工具日志记录器
+data_logger = get_logger('data_utils', console_output=True)
+# 创建市场更新专用日志记录器
+markets_logger = get_logger('update_markets', console_output=True)
 
 # 这里似乎会移除持仓
 def update_positions(avgOnly=False):
@@ -31,15 +36,15 @@ def update_positions(avgOnly=False):
 
                     if asset in  global_state.last_trade_update:
                         if time.time() - global_state.last_trade_update[asset] < 5:
-                            print(f"跳过 {asset} 的更新，因为最后交易更新不到5秒前")
+                            data_logger.debug(f"跳过 {asset} 的更新，因为最后交易更新不到5秒前")
                             continue
 
                     if old_size != row['size']:
-                        print(f"没有待处理的交易。使用API将持仓从 {old_size} 更新到 {row['size']}，平均价更新到 {row['avgPrice']}")
+                        data_logger.info(f"没有待处理的交易。使用API将持仓从 {old_size} 更新到 {row['size']}，平均价更新到 {row['avgPrice']}")
 
                     position['size'] = row['size']
                 else:
-                    print(f"警告: 跳过 {asset} 的更新，因为 {col} 有待处理的交易，如下 {global_state.performing[col]}")
+                    data_logger.warning(f"跳过 {asset} 的更新，因为 {col} 有待处理的交易: {global_state.performing[col]}")
 
         global_state.positions[asset] = position
 
@@ -86,7 +91,7 @@ def set_position(token, side, size, price, source='websocket'):
     else:
         global_state.positions[token] = {'size': size, 'avgPrice': price}
 
-    print(f"从 {source} 更新持仓，设置为 ", global_state.positions[token])
+    data_logger.info(f"从 {source} 更新持仓 {token}，设置为 {global_state.positions[token]}")
 
 def update_orders():
     all_orders = global_state.client.get_all_orders()
@@ -110,7 +115,7 @@ def update_orders():
                         curr = sel_orders[type]
 
                         if len(curr) > 1:
-                            print("发现多个订单，取消中")
+                            data_logger.warning(f"发现多个订单 {token}，取消中")
                             global_state.client.cancel_all_asset(token)
                             orders[str(token)] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
                         elif len(curr) == 1:
@@ -141,15 +146,19 @@ def set_order(token, side, size, price):
     curr[side]['price'] = float(price)
 
     global_state.orders[str(token)] = curr
-    print("更新订单，设置为 ", curr)
+    data_logger.info(f"更新订单 {token}，设置为 {curr}")
 
 
 
 def update_markets():
+    markets_logger.info("开始更新市场数据...")
     received_df, received_params = get_sheet_df()
 
     if len(received_df) > 0:
         global_state.df, global_state.params = received_df.copy(), received_params
+        markets_logger.info(f"成功更新 {len(received_df)} 个市场")
+    else:
+        markets_logger.warning("未获取到市场数据")
 
 
     for _, row in global_state.df.iterrows():
