@@ -127,7 +127,7 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
         ws.clear()
 
         # 准备所有数据（包括表头）
-        headers = ['question', 'max_size', 'param_type', 'comments']
+        headers = ['question', 'max_size', 'trade_size', 'param_type', 'comments']
         all_rows = [headers]
 
         # 添加市场数据
@@ -151,7 +151,7 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
             row = [
                 question,  # 从原始数据获取，保证正确
                 market.get('max_size', 0),
-                # market.get('trade_size', 0),
+                market.get('trade_size', 0),
                 str(market.get('param_type', 'mid')),
                 str(market.get('comments', ''))
             ]
@@ -329,18 +329,24 @@ if __name__ == '__main__':
     parser.add_argument('--max-markets', type=int,
                         default=int(os.getenv('AI_MAX_MARKETS', '3')),
                         help='最大市场数量')
-    parser.add_argument('--max-size', type=float, default=20, help='单个市场最大投入（USDC）')
+    parser.add_argument('--max-size', type=float, help='单个市场最大投入（USDC），默认为钱包余额')
     parser.add_argument('--trade-size', type=float, default=20, help='每次交易规模（USDC）')
     parser.add_argument('--preferences', type=str, default='', help='额外偏好（如：避免加密货币相关市场）')
-    
+
     args = parser.parse_args()
-    
+
+    # 获取钱包余额
+    wallet_balance = args.wallet_balance if args.wallet_balance else get_wallet_balance()
+
+    # 如果未指定 max_size，默认为钱包余额
+    max_size_per_market = args.max_size if args.max_size else wallet_balance
+
     # 构建配置
     config = {
-        'wallet_balance': args.wallet_balance if args.wallet_balance else get_wallet_balance(),
+        'wallet_balance': wallet_balance,
         'risk_preference': ai_config.RISK_PREFERENCES.get(args.risk, ai_config.RISK_PREFERENCES['conservative']),
         'max_markets': args.max_markets,
-        'max_size_per_market': args.max_size,
+        'max_size_per_market': max_size_per_market,
         # 'trade_size': args.trade_size,
         'additional_preferences': args.preferences
     }
