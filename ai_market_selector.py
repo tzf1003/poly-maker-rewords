@@ -127,7 +127,7 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
         ws.clear()
 
         # 准备所有数据（包括表头）
-        headers = ['question', 'max_size', 'trade_size', 'param_type', 'comments']
+        headers = ['question', 'max_size', 'param_type', 'comments']
         all_rows = [headers]
 
         # 添加市场数据
@@ -151,7 +151,7 @@ def update_selected_markets(markets: Optional[List[Dict[str, Any]]] = None) -> s
             row = [
                 question,  # 从原始数据获取，保证正确
                 market.get('max_size', 0),
-                market.get('trade_size', 0),
+                # market.get('trade_size', 0),
                 str(market.get('param_type', 'mid')),
                 str(market.get('comments', ''))
             ]
@@ -287,7 +287,7 @@ def run_ai_selector(config: Dict[str, Any] = None):
         risk_preference=config['risk_preference'],
         max_markets=config['max_markets'],
         max_size_per_market=config['max_size_per_market'],
-        trade_size=config['trade_size'],
+        # trade_size=config['trade_size'],
         additional_preferences=config.get('additional_preferences', ''),
         liquidity_markets=format_markets_for_prompt(liquidity_markets_df),
         current_selections=format_markets_for_prompt(current_selections_df, limit=100),
@@ -341,7 +341,7 @@ if __name__ == '__main__':
         'risk_preference': ai_config.RISK_PREFERENCES.get(args.risk, ai_config.RISK_PREFERENCES['conservative']),
         'max_markets': args.max_markets,
         'max_size_per_market': args.max_size,
-        'trade_size': args.trade_size,
+        # 'trade_size': args.trade_size,
         'additional_preferences': args.preferences
     }
     
