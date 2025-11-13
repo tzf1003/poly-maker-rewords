@@ -7,6 +7,7 @@ import pandas as pd             # 数据分析库
 import math                     # 数学函数
 
 import poly_data.global_state as global_state
+import poly_data.global_state as global_state
 import poly_data.CONSTANTS as CONSTANTS
 
 # 导入交易工具函数
@@ -224,9 +225,17 @@ async def perform_trade(market):
                     set_position(row['token2'], 'SELL', scaled_amt, 0, 'merge')
 
             # ------- 每个结果的交易逻辑 -------
+            # 创建一个集合来跟踪已处理的token（用于反向持仓卖出）
+            processed_tokens = set()
+
             # 遍历市场中的两个结果（YES和NO）
             for detail in deets:
                 token = int(detail['token'])
+
+                # 如果这个token已经被处理过（作为反向持仓卖出），跳过
+                if token in processed_tokens:
+                    trading_logger.info(f"跳过 {token}，因为已作为反向持仓处理")
+                    continue
 
                 # 获取此token的当前订单
                 orders = get_order(token)
@@ -497,6 +506,10 @@ async def perform_trade(market):
 
                                         # 发送卖单
                                         send_sell_order(reverse_sell_order)
+
+                                        # 将反向token添加到已处理集合，避免后续被取消
+                                        processed_tokens.add(rev_token)
+                                        trading_logger.info(f"已将 {rev_token} 标记为已处理，避免卖单被取消")
                                     else:
                                         trading_logger.error(f"无法获取反向持仓 {rev_token} 的有效市场数据，跳过卖出")
 
