@@ -52,6 +52,12 @@ def send_buy_order(order):
     if should_cancel and (existing_buy_size > 0 or order['orders']['sell']['size'] > 0):
         trading_logger.info(f"取消买单 - 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         client.cancel_all_asset(order['token'])
+
+        # 立即清空本地订单状态
+        token_str = str(order['token'])
+        if token_str in global_state.orders:
+            global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
+            trading_logger.debug(f"已清空本地订单状态: {token_str}")
     elif not should_cancel:
         trading_logger.debug(f"保持现有买单 - 微小变化: 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         return  # 如果现有订单没问题就不下新单
@@ -76,6 +82,14 @@ def send_buy_order(order):
                 order['size'],
                 True if order['neg_risk'] == 'TRUE' else False
             )
+
+            # 立即更新本地订单状态，防止重复创建
+            token_str = str(order['token'])
+            if token_str not in global_state.orders:
+                global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
+            global_state.orders[token_str]['buy']['price'] = float(order['price'])
+            global_state.orders[token_str]['buy']['size'] = float(order['size'])
+            trading_logger.debug(f"已更新本地买单状态: {global_state.orders[token_str]}")
         else:
             trading_logger.warning(f"不创建买单，因为价格 {order['price']} 超出可接受范围(0.1-0.9)")
     else:
@@ -112,6 +126,12 @@ def send_sell_order(order):
     if should_cancel and (existing_sell_size > 0 or order['orders']['buy']['size'] > 0):
         trading_logger.info(f"取消卖单 - 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         client.cancel_all_asset(order['token'])
+
+        # 立即清空本地订单状态
+        token_str = str(order['token'])
+        if token_str in global_state.orders:
+            global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
+            trading_logger.debug(f"已清空本地订单状态: {token_str}")
     elif not should_cancel:
         trading_logger.debug(f"保持现有卖单 - 微小变化: 价格差: {price_diff:.4f}, 数量差: {size_diff:.1f}")
         return  # 如果现有订单没问题就不下新单
@@ -124,6 +144,14 @@ def send_sell_order(order):
         order['size'],
         True if order['neg_risk'] == 'TRUE' else False
     )
+
+    # 立即更新本地订单状态，防止重复创建
+    token_str = str(order['token'])
+    if token_str not in global_state.orders:
+        global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
+    global_state.orders[token_str]['sell']['price'] = float(order['price'])
+    global_state.orders[token_str]['sell']['size'] = float(order['size'])
+    trading_logger.debug(f"已更新本地卖单状态: {global_state.orders[token_str]}")
 
 # 字典，用于存储每个市场的锁，防止同一市场的并发交易
 market_locks = {}
@@ -404,6 +432,12 @@ async def perform_trade(market):
 
                             trading_logger.warning(f'取消所有订单，原因: {" 且 ".join(reasons)}')
                             client.cancel_all_asset(order['token'])
+
+                            # 立即清空本地订单状态
+                            token_str = str(order['token'])
+                            if token_str in global_state.orders:
+                                global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
+                                trading_logger.debug(f"已清空本地订单状态: {token_str}")
                         else:
                             # 检查反向持仓（持有相反结果）
                             rev_token = global_state.REVERSE_TOKENS[str(token)]
@@ -416,6 +450,12 @@ async def perform_trade(market):
                                     trading_logger.info("取消买单，因为存在反向持仓")
                                     client.cancel_all_asset(order['token'])
 
+                                    # 立即清空本地订单状态
+                                    token_str = str(order['token'])
+                                    if token_str in global_state.orders:
+                                        global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
+                                        trading_logger.debug(f"已清空本地订单状态: {token_str}")
+
                                 continue
 
                             # 检查市场买卖量比率
@@ -423,6 +463,12 @@ async def perform_trade(market):
                                 send_buy = False
                                 trading_logger.info(f"不发送买单，因为总体比率为 {overall_ratio}")
                                 client.cancel_all_asset(order['token'])
+
+                                # 立即清空本地订单状态
+                                token_str = str(order['token'])
+                                if token_str in global_state.orders:
+                                    global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
+                                    trading_logger.debug(f"已清空本地订单状态: {token_str}")
                             else:
                                 # 如果满足以下任一条件，则下新买单：
                                 # 1. 我们可以获得比当前订单更好的价格

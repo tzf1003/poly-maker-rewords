@@ -299,9 +299,8 @@ USER_PROMPT_TEMPLATE = """## 用户配置
 
 - **钱包余额**: {wallet_balance} USDC
 - **风险偏好**: {risk_preference}
-- **最大市场数量**: {max_markets}
+- **最大选择市场数量**: {max_markets}
 - **单个市场最大投入**: {max_size_per_market} USDC
-- **每次交易规模**: {trade_size} USDC
 
 {additional_preferences}
 
@@ -367,8 +366,8 @@ USER_PROMPT_TEMPLATE = """## 用户配置
 DEFAULT_CONFIG = {
     "wallet_balance": 20.0,
     "risk_preference": "保守（避免高波动市场，优先稳定收益）",
-    "max_markets": 5,
-    "max_size_per_market": 20,  # 调整为钱包余额以内
+    "max_markets": 10,
+    "max_size_per_market": 200,  # 调整为钱包余额以内
     "trade_size": 20,  # 满足大多数市场的 min_size=20
     "additional_preferences": ""
 }
