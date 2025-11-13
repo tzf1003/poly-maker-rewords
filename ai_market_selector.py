@@ -279,15 +279,28 @@ def run_ai_selector(config: Dict[str, Any] = None):
     # 获取超参数表
     hyperparameters_df = get_hyperparameters()
     print(f"⚙️  超参数配置: {len(hyperparameters_df)} 条")
-    
+
+    # 计算 trade_size 和 max_size 建议值
+    wallet_balance = config['wallet_balance']
+    trade_size_min = wallet_balance * 0.5
+    trade_size_max = wallet_balance * 0.9
+    trade_size_example = wallet_balance * 0.7  # 70% 作为示例
+    max_size_min = trade_size_min * 4
+    max_size_max = trade_size_max * 5
+    max_size_example = trade_size_example * 4  # 4倍作为示例
+
     # 构建用户提示词
     print("\n🔧 构建提示词...")
     user_prompt = ai_config.USER_PROMPT_TEMPLATE.format(
         wallet_balance=config['wallet_balance'],
         risk_preference=config['risk_preference'],
         max_markets=config['max_markets'],
-        max_size_per_market=config['max_size_per_market'],
-        # trade_size=config['trade_size'],
+        trade_size_min=trade_size_min,
+        trade_size_max=trade_size_max,
+        trade_size_example=trade_size_example,
+        max_size_min=max_size_min,
+        max_size_max=max_size_max,
+        max_size_example=max_size_example,
         additional_preferences=config.get('additional_preferences', ''),
         liquidity_markets=format_markets_for_prompt(liquidity_markets_df),
         current_selections=format_markets_for_prompt(current_selections_df, limit=100),
@@ -329,8 +342,6 @@ if __name__ == '__main__':
     parser.add_argument('--max-markets', type=int,
                         default=int(os.getenv('AI_MAX_MARKETS', '3')),
                         help='最大市场数量')
-    parser.add_argument('--max-size', type=float, help='单个市场最大投入（USDC），默认为钱包余额')
-    parser.add_argument('--trade-size', type=float, default=20, help='每次交易规模（USDC）')
     parser.add_argument('--preferences', type=str, default='', help='额外偏好（如：避免加密货币相关市场）')
 
     args = parser.parse_args()
@@ -338,16 +349,11 @@ if __name__ == '__main__':
     # 获取钱包余额
     wallet_balance = args.wallet_balance if args.wallet_balance else get_wallet_balance()
 
-    # 如果未指定 max_size，默认为钱包余额
-    max_size_per_market = args.max_size if args.max_size else wallet_balance
-
     # 构建配置
     config = {
         'wallet_balance': wallet_balance,
         'risk_preference': ai_config.RISK_PREFERENCES.get(args.risk, ai_config.RISK_PREFERENCES['conservative']),
         'max_markets': args.max_markets,
-        'max_size_per_market': max_size_per_market,
-        # 'trade_size': args.trade_size,
         'additional_preferences': args.preferences
     }
     

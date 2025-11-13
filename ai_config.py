@@ -372,7 +372,11 @@ USER_PROMPT_TEMPLATE = """## 用户配置
 - **钱包余额**: {wallet_balance} USDC
 - **风险偏好**: {risk_preference}
 - **最大选择市场数量**: {max_markets}
-- **单个市场最大投入**: {max_size_per_market} USDC
+
+**trade_size 和 max_size 计算规则** ⚠️
+- **trade_size 建议**：钱包余额的 50%-90%（建议 {trade_size_min:.0f}-{trade_size_max:.0f} USDC）
+- **max_size 建议**：trade_size 的 4-5 倍（建议 {max_size_min:.0f}-{max_size_max:.0f} USDC）
+- **示例**：钱包余额 {wallet_balance} USDC → trade_size = {trade_size_example:.0f} USDC (70%) → max_size = {max_size_example:.0f} USDC (4倍)
 
 {additional_preferences}
 
@@ -439,7 +443,6 @@ DEFAULT_CONFIG = {
     "wallet_balance": 300.0,
     "risk_preference": "平衡（中等风险，追求收益与风险的平衡）",
     "max_markets": 20,
-    "max_size_per_market": 300,
     "additional_preferences": ""
 }
 

@@ -445,7 +445,9 @@ async def perform_trade(market):
 
                             # 如果我们有显著的对立持仓，不要再买入
                             if rev_pos['size'] > row['min_size']:
-                                trading_logger.info("跳过创建新买单，因为存在反向持仓")
+                                trading_logger.info(f"检测到反向持仓: {rev_token} 持仓 {rev_pos['size']}, 平均价 {rev_pos['avgPrice']}")
+
+                                # 取消当前 token 的买单
                                 if orders['buy']['size'] > CONSTANTS.MIN_MERGE_SIZE:
                                     trading_logger.info("取消买单，因为存在反向持仓")
                                     client.cancel_all_asset(order['token'])
@@ -455,6 +457,48 @@ async def perform_trade(market):
                                     if token_str in global_state.orders:
                                         global_state.orders[token_str] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
                                         trading_logger.debug(f"已清空本地订单状态: {token_str}")
+
+                                # 主动卖出反向持仓
+                                if rev_pos['size'] > row['min_size'] and rev_pos['avgPrice'] > 0:
+                                    trading_logger.warning(f"准备主动卖出反向持仓 {rev_token}")
+
+                                    # 获取反向 token 的市场数据
+                                    rev_token_name = 'token1' if str(rev_token) == str(row['token1']) else 'token2'
+                                    rev_deets = get_best_bid_ask_deets(market, rev_token_name, 100, 0.1)
+
+                                    # 如果市场数据有效，创建卖单
+                                    if rev_deets['best_bid'] is not None and rev_deets['best_bid'] > 0:
+                                        # 计算卖出价格：使用市场最佳买价以确保快速成交
+                                        sell_price = round(rev_deets['best_bid'], round_length)
+                                        sell_size = round_down(rev_pos['size'], 2)
+
+                                        # 计算预期盈亏
+                                        expected_pnl = (sell_price - rev_pos['avgPrice']) / rev_pos['avgPrice'] * 100 if rev_pos['avgPrice'] > 0 else 0
+
+                                        trading_logger.warning(
+                                            f"创建反向持仓卖单: Token={rev_token}, "
+                                            f"数量={sell_size}, 价格={sell_price}, "
+                                            f"平均成本={rev_pos['avgPrice']}, 预期盈亏={expected_pnl:.2f}%"
+                                        )
+
+                                        # 获取反向 token 的订单信息
+                                        rev_orders = get_order(rev_token)
+
+                                        # 准备反向持仓的卖单
+                                        reverse_sell_order = {
+                                            'token': rev_token,
+                                            'size': sell_size,
+                                            'price': sell_price,
+                                            'neg_risk': row['neg_risk'],
+                                            'orders': rev_orders,
+                                            'mid_price': (rev_deets['best_bid'] + rev_deets['best_ask']) / 2 if rev_deets['best_ask'] else sell_price,
+                                            'max_spread': row['max_spread']
+                                        }
+
+                                        # 发送卖单
+                                        send_sell_order(reverse_sell_order)
+                                    else:
+                                        trading_logger.error(f"无法获取反向持仓 {rev_token} 的有效市场数据，跳过卖出")
 
                                 continue
 
